@@ -127,6 +127,7 @@ type Connection struct {
 }
 
 func Run(args []string) {
+	waitable := []chan struct{}{}
 	ctx := context.Background()
 	db, err := sql.Open("sqlite3", os.ExpandEnv("$HOME/.evilkarma.db"))
 	if err != nil {
@@ -265,10 +266,18 @@ func Run(args []string) {
 		connection.Debug = true
 		err = connection.Connect(connectionConf.Server)
 		if err == nil {
-			go connection.Loop()
+			notify := make(chan struct{})
+			waitable = append(waitable, notify)
+			go func(notify chan struct{}) {
+				defer close(notify)
+				connection.Loop()
+			}(notify)
 		} else {
 			logger.Printf("Failed to connect: %s \n", err.Error())
 			return
 		}
+	}
+	for _, channel := range waitable {
+		<-channel
 	}
 }
